@@ -42,7 +42,7 @@ namespace ServerPasswordOnce.Patches
 			yield return AccessTools.Method(typeof(ZNet), "RPC_PeerInfo");
 		}
 
-		private static void Prefix(ZRpc rpc, out string __state)
+		private static void Prefix(ZRpc rpc, out string __state, System.Reflection.MethodBase __originalMethod)
 		{
 			__state = null;
 
@@ -59,6 +59,13 @@ namespace ServerPasswordOnce.Patches
 
 			__state = ZNet.m_serverPassword;
 			ZNet.m_serverPassword = string.Empty;
+
+			// A password window that never opens leaves no trace anywhere. Without this line a working mod
+			// and a mod that never ran look exactly the same in the log.
+			if (__originalMethod.Name == "RPC_ServerHandshake")
+			{
+				Core.Log.LogInfo($"{userId} gave this password before and joins without the password window.");
+			}
 		}
 
 		private static void Postfix(ZRpc rpc, string __state, System.Reflection.MethodBase __originalMethod)
