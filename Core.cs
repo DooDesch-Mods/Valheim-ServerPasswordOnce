@@ -1,32 +1,27 @@
 using BepInEx;
 using BepInEx.Logging;
-using ServerPasswordOnce.Config;
 using HarmonyLib;
-using ServerSync;
+using ServerPasswordOnce.Config;
 
 namespace ServerPasswordOnce
 {
+	/// <summary>
+	/// A server only mod. Players install nothing, and a player without it notices nothing except that the
+	/// password window stops appearing once they have given the password.
+	///
+	/// There is deliberately no config sync and no version demand on connecting clients. A demand of that
+	/// kind would disconnect exactly the vanilla players this mod is meant to wave through.
+	/// </summary>
 	[BepInPlugin(PluginGuid, PluginName, DooDesch.ModVersion.Current)]
 	public sealed class Core : BaseUnityPlugin
 	{
-		// The GUID is what BepInEx, the mod managers and ServerSync key on. Letters, digits, dot,
-		// underscore and hyphen only - the chainloader rejects anything else. Never change it after the
-		// first release.
+		// The GUID is what BepInEx and the mod managers key on. Letters, digits, dot, underscore and hyphen
+		// only - the chainloader rejects anything else. Never change it after the first release.
 		public const string PluginGuid = "DooDesch.ServerPasswordOnce";
 		public const string PluginName = "ServerPasswordOnce";
 
 		internal static ManualLogSource Log;
 		private Harmony _harmony;
-
-		// ServerSync is merged into this DLL (Workspace/build/ServerSync.targets). CurrentVersion is the
-		// attribute version, so a 0.0.0 local build and a 1.2.3 server are told apart on connect; with
-		// MinimumRequiredVersion set, an older client is disconnected with a readable message.
-		internal static readonly ConfigSync ConfigSync = new ConfigSync(PluginGuid)
-		{
-			DisplayName = PluginName,
-			CurrentVersion = DooDesch.ModVersion.Current,
-			MinimumRequiredVersion = DooDesch.ModVersion.Current
-		};
 
 		private void Awake()
 		{
