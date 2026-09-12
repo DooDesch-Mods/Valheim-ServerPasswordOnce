@@ -1,0 +1,7 @@
+bin/
+obj/
+.vs/
+*.user
+.claude/
+# The Workspace checkout that CI places inside the repo; locally it is a sibling folder.
+Workspace/

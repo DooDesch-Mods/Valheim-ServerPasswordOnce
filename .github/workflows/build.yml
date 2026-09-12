@@ -1,0 +1,79 @@
+# Builds on every push and every pull request - not only on a tag.
+#
+# Both configurations on purpose: files behind `#if DEBUG` fall out of the Release build, so a
+# Release-only build never checks the developer tooling, and a Debug-only build never checks the
+# hardening (DebugType=none) that only Release applies.
+name: build
+
+on:
+  push:
+    branches: ["**"]
+    tags-ignore: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [Debug, Release]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # The reference assemblies live in the private Workspace repo (lib/game, lib/bepinex,
+      # lib/serversync). The checkout lands INSIDE this repo, which is the second of the two Import
+      # paths every csproj carries.
+      - name: Checkout Workspace repository (build libs)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/Valheim-Workspace
+          ref: 9efa9532615c1c5e106f98637f1eb64361e80e78 # Update deliberately after validating Workspace changes.
+          path: Workspace
+          ssh-key: ${{ secrets.WORKSPACE_TOKEN }}
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Build (${{ matrix.configuration }})
+        run: >
+          dotnet build ServerPasswordOnce.csproj
+          --configuration ${{ matrix.configuration }}
+          -p:WorkspaceLibPath="${{ github.workspace }}/Workspace/lib"
+          -p:GameManagedPath="${{ github.workspace }}/Workspace/lib/game"
+          -p:BepInExPath="${{ github.workspace }}/Workspace/lib/bepinex"
+          -p:ServerSyncPath="${{ github.workspace }}/Workspace/lib/serversync"
+          -p:DeployVerifyDisable=true
+          -p:RestoreLockedMode=true
+
+      - name: Show the built plugin
+        run: ls -la bin/${{ matrix.configuration }}/net48/
+
+  # The README standard is failable (Workspace/docs/README-STANDARD.md): Support line, no dashes,
+  # config table, official links. Windows runner, because the check is a PowerShell script written
+  # for the workspace and its paths.
+  readme-rules:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Checkout Workspace repository (tools)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/Valheim-Workspace
+          ref: 9efa9532615c1c5e106f98637f1eb64361e80e78 # Update deliberately after validating Workspace changes.
+          path: Workspace
+          ssh-key: ${{ secrets.WORKSPACE_TOKEN }}
+
+      - name: check-readme
+        shell: pwsh
+        run: pwsh -NoProfile -File Workspace/tools/check-readme.ps1 -Path "${{ github.workspace }}"
