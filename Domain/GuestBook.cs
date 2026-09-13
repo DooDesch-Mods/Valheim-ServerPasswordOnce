@@ -12,6 +12,11 @@ namespace ServerPasswordOnce.Domain
 	internal sealed class GuestEntry
 	{
 		internal string Fingerprint;
+
+		/// <summary>
+		/// Kept in UTC, so expiry and ordering do not jump when the clock of the server changes for daylight
+		/// saving. The file and the admin command show it in the local time of the server.
+		/// </summary>
 		internal DateTime LastSeenUtc;
 	}
 
@@ -264,7 +269,7 @@ namespace ServerPasswordOnce.Domain
 			{
 				text.Append(entry.Key).Append(' ')
 					.Append(entry.Value.Fingerprint).Append(' ')
-					.AppendLine(entry.Value.LastSeenUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
+					.AppendLine(entry.Value.LastSeenUtc.ToLocalTime().ToString("O", CultureInfo.InvariantCulture));
 			}
 
 			string temporary = _path + ".new";

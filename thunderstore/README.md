@@ -48,7 +48,7 @@ that player is online. For other players, use the id from `list`.
 ## Guest list
 
 `serverpasswordonce.txt` in the save folder of the server, next to `adminlist.txt`. One line per guest:
-Steam id, password fingerprint, last join in UTC.
+Steam id, password fingerprint, last join.
 
 To remove a guest by hand, delete the line and run `serverpasswordonce reload`.
 

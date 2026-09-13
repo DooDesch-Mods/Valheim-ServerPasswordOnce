@@ -92,8 +92,8 @@ namespace ServerPasswordOnce.Runtime
 			{
 				// The fingerprint is shortened on purpose. The whole value says nothing about the password,
 				// but there is no reason to spread it across a console either.
-				string seen = entry.Value.LastSeenUtc.ToUniversalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
-				Say(args, $"  {entry.Key}  {entry.Value.Fingerprint.Substring(0, 8)}...  last seen {seen} UTC");
+				string seen = entry.Value.LastSeenUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+				Say(args, $"  {entry.Key}  {entry.Value.Fingerprint.Substring(0, 8)}...  last seen {seen}");
 				shown++;
 			}
 
