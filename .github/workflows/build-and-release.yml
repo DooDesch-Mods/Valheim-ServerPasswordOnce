@@ -1,16 +1,17 @@
 name: Build and Release on Tag
 
-# Push a tag "vX.Y.Z" on the default branch and this builds Release, publishes a GitHub Release, and
-# uploads to Thunderstore + Nexus. Mirrors the Schedule I and Mimesis pipelines.
+# Push a tag "vX.Y.Z" on the default branch and this builds Release and publishes a private GitHub Release
+# with the packages and publish.json. The public DooDesch-Mods/Releases workflow then uploads them to
+# Thunderstore and Nexus and announces them in Discord; Workspace/tools/ship.ps1 starts it.
 #
 # One-time setup:
 #   - Private build-libs repo  ${owner}/Valheim-Workspace  must contain lib/game, lib/bepinex,
 #     lib/serversync (see Workspace/lib/README.md).
-#   - Secrets: WORKSPACE_TOKEN (SSH deploy key for that repo, per repo); THUNDERSTORE_TOKEN,
-#     NEXUSMODS_API_KEY and DISCORD_RELEASE_WEBHOOK are org secrets and are inherited.
-#   - Repo variables NEXUS_FILE_GROUP_ID and NEXUS_MOD_ID (the Nexus upload job is skipped until both
-#     are set, so GitHub + Thunderstore releases work immediately). NEXUS_MOD_ID is the global uid:
-#     3667 * 2^32 + <page id> (3667 = Valheim on Nexus).
+#   - Secret WORKSPACE_TOKEN (SSH deploy key for that repo, per repo).
+#   - The GitHub App of DooDesch-Mods/Releases must be installed on this repository, so that workflow can
+#     read the release files.
+#   - Repo variables NEXUS_FILE_GROUP_ID and NEXUS_MOD_ID (the Nexus upload is skipped until both are set).
+#     NEXUS_MOD_ID is the global uid: 3667 * 2^32 + <page id> (3667 = Valheim on Nexus).
 #   - thunderstore/icon.png must be exactly 256x256 (Thunderstore requirement).
 
 on:
@@ -249,151 +250,70 @@ jobs:
           name: ${{ env.MOD_NAME }}-nexus
           path: "${{ env.MOD_NAME }}_${{ steps.version-check.outputs.version }}_nexus.zip"
 
+      # The public DooDesch-Mods/Releases workflow uploads to the stores, because a private repository does
+      # not receive the organization secrets. It reads the store metadata from this file on the release.
+      - name: Write publish.json
+        env:
+          VERSION: ${{ steps.version-check.outputs.version }}
+          NOTES: ${{ steps.changelog.outputs.notes }}
+          NOTES_BBCODE: ${{ steps.changelog.outputs.notes_bbcode }}
+          NOTES_PLAIN: ${{ steps.changelog.outputs.notes_plain }}
+          NEXUS_MOD_ID: ${{ vars.NEXUS_MOD_ID }}
+          NEXUS_FILE_GROUP_ID: ${{ vars.NEXUS_FILE_GROUP_ID }}
+        run: |
+          jq -n \
+            --arg repo "${GITHUB_REPOSITORY#*/}" \
+            --arg name "$MOD_NAME" \
+            --arg version "$VERSION" \
+            --slurpfile manifest thunderstore/manifest.json \
+            --arg notes "$NOTES" \
+            --arg notes_bbcode "$NOTES_BBCODE" \
+            --arg notes_plain "$NOTES_PLAIN" \
+            --arg nexus_mod_id "$NEXUS_MOD_ID" \
+            --arg nexus_file_group_id "$NEXUS_FILE_GROUP_ID" \
+            '{repo: $repo, name: $name, version: $version,
+              game: "valheim", game_title: "Valheim",
+              thunderstore_community: "valheim", thunderstore_categories: ["mods"], nexus_domain: "valheim",
+              description: $manifest[0].description, dependencies: $manifest[0].dependencies,
+              notes: $notes, notes_bbcode: $notes_bbcode, notes_plain: $notes_plain,
+              nexus_mod_id: $nexus_mod_id, nexus_file_group_id: $nexus_file_group_id,
+              package: "\($name)_\($version).zip", nexus_package: "\($name)_\($version)_nexus.zip"}' > publish.json
+          cat publish.json
+
+      - name: Upload publish.json
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.MOD_NAME }}-publish
+          path: publish.json
+
   release:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Download built ZIP
+      - name: Download the build
         uses: actions/download-artifact@v4
         with:
-          name: ${{ env.MOD_NAME }}
+          path: artifacts
+          merge-multiple: true
 
       - name: Extract DLL from ZIP
         run: |
-          unzip -q "${MOD_NAME}_${{ needs.build.outputs.version }}.zip" -d release/
-          ls -la release/
+          mkdir -p release
+          unzip -q "artifacts/${MOD_NAME}_${{ needs.build.outputs.version }}.zip" -d release/
+          ls -la release/ artifacts/
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           generate_release_notes: true
-          files: release/${{ env.MOD_NAME }}.dll
+          files: |
+            release/${{ env.MOD_NAME }}.dll
+            artifacts/${{ env.MOD_NAME }}_${{ needs.build.outputs.version }}.zip
+            artifacts/${{ env.MOD_NAME }}_${{ needs.build.outputs.version }}_nexus.zip
+            artifacts/publish.json
           body: |
             ## Changes in ${{ needs.build.outputs.version }}
 
             ${{ needs.build.outputs.notes }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # Discord renders a `release` webhook as an empty box, so the embed is built here, where the version
-      # and the changelog section are already known. Runs only after the GitHub release succeeded; exits
-      # early when the secret is not set.
-      - name: Announce the release in Discord
-        env:
-          WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
-          VERSION: ${{ needs.build.outputs.version }}
-          NOTES: ${{ needs.build.outputs.notes }}
-          REPO: ${{ github.repository }}
-          PRIVATE: ${{ github.event.repository.private }}
-          NEXUS_MOD_ID: ${{ vars.NEXUS_MOD_ID }}
-        run: |
-          if [ -z "$WEBHOOK" ]; then echo "DISCORD_RELEASE_WEBHOOK is not set - nothing announced."; exit 0; fi
-
-          SHORT="${REPO#*/}"
-          NAME=$(jq -r '.name // empty' thunderstore/manifest.json)
-          [ -z "$NAME" ] && NAME="${SHORT#Valheim-}"
-
-          STORE="https://thunderstore.io/c/valheim/p/DooDesch/$NAME/"
-          # A private repository has no release page and no raw file a Discord reader could open, so the
-          # post then points to the store and carries no thumbnail.
-          if [ "$PRIVATE" = "true" ]; then
-            URL="$STORE"
-            ICON=""
-            LINKS="[Thunderstore]($STORE)"
-          else
-            URL="https://github.com/$REPO/releases/tag/v$VERSION"
-            ICON="https://raw.githubusercontent.com/$REPO/main/thunderstore/icon.png"
-            LINKS="[Thunderstore]($STORE) · [GitHub]($URL)"
-          fi
-
-          # NEXUS_MOD_ID is the global uid, game_id * 2^32 + page_id, and the page id is what the URL wants.
-          if [ -n "$NEXUS_MOD_ID" ]; then
-            GAME_ID=$(( NEXUS_MOD_ID / 4294967296 ))
-            PAGE_ID=$(( NEXUS_MOD_ID % 4294967296 ))
-            if [ "$GAME_ID" = "3667" ]; then
-              LINKS="[Nexus](https://www.nexusmods.com/valheim/mods/$PAGE_ID) · $LINKS"
-            fi
-          fi
-
-          # jq builds the JSON so a changelog with quotes, backticks or newlines cannot break the payload.
-          jq -n --arg title "$NAME $VERSION" \
-                --arg url "$URL" \
-                --arg desc "$NOTES" \
-                --arg icon "$ICON" \
-                --arg links "$LINKS" \
-                --arg foot "Valheim · $SHORT" \
-            '{embeds: [({
-                title: $title,
-                url: $url,
-                description: ($desc | if length > 1400 then .[0:1400] + "\n..." else . end),
-                color: 8256434,
-                fields: [{name: "Get it", value: $links}],
-                footer: {text: $foot}
-             } + (if $icon == "" then {} else {thumbnail: {url: $icon}} end))]}' > payload.json
-
-          curl -sS -f -X POST -H "Content-Type: application/json" -d @payload.json "$WEBHOOK" \
-            && echo "announced $NAME $VERSION"
-
-  thunderstore:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Download built ZIP
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ env.MOD_NAME }}
-
-      - name: Extract ZIP for Thunderstore
-        run: |
-          mkdir -p thunderstore-package
-          unzip -q "${MOD_NAME}_${{ needs.build.outputs.version }}.zip" -d thunderstore-package/
-
-      - name: Upload to Thunderstore
-        uses: GreenTF/upload-thunderstore-package@v4.3
-        with:
-          token: ${{ secrets.THUNDERSTORE_TOKEN }}
-          community: valheim
-          repo: thunderstore.io
-          namespace: DooDesch
-          name: ${{ env.MOD_NAME }}
-          description: "The server asks a returning player for the password only when it changed."
-          version: ${{ needs.build.outputs.version }}
-          path: thunderstore-package
-          deps: |
-            denikson-BepInExPack_Valheim-5.4.2333
-          categories: |
-            mods
-
-  nexus:
-    needs: build
-    runs-on: ubuntu-latest
-    # Skipped until the Nexus mod page exists and both IDs are set as repo variables.
-    if: ${{ vars.NEXUS_FILE_GROUP_ID != '' && vars.NEXUS_MOD_ID != '' }}
-    steps:
-      - name: Download Nexus ZIP
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ env.MOD_NAME }}-nexus
-
-      - name: Upload to Nexus Mods
-        uses: Nexus-Mods/upload-action@v1.0.0-beta.10
-        with:
-          api_key: ${{ secrets.NEXUSMODS_API_KEY }}
-          file_id: ${{ vars.NEXUS_FILE_GROUP_ID }}
-          mod_id: ${{ vars.NEXUS_MOD_ID }}
-          filename: "${{ env.MOD_NAME }}_${{ needs.build.outputs.version }}_nexus.zip"
-          version: ${{ needs.build.outputs.version }}
-          display_name: "${{ env.MOD_NAME }} ${{ needs.build.outputs.version }}"
-          description: ${{ needs.build.outputs.notes_bbcode }}
-          changelog: ${{ github.event_name == 'push' && github.run_attempt == 1 && needs.build.outputs.notes_plain || '' }}
-          category: main
-          archive_existing_version: true
-          update_mod_version: true
-          primary_mod_manager_download: true
-          allow_mod_manager_download: true
