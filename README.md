@@ -2,118 +2,88 @@
 
 > 🛟 **Need help or found a bug?** Get support at [support.doodesch.de/serverpasswordonce](https://support.doodesch.de/serverpasswordonce).
 
-> Your players type the server password once. After that the window stops appearing, until you change the
-> password. Only the server needs the mod; nobody has to install anything.
+> Server mod: a player who already entered the current server password is not asked for it again.
 
 ![Game](https://img.shields.io/badge/game-Valheim%201.0.12-blue)
 ![BepInEx](https://img.shields.io/badge/BepInEx-5.4.23.3-green)
 ![Side](https://img.shields.io/badge/side-server%20only-blue)
 ![Status](https://img.shields.io/badge/status-stable-green)
 
-## Features
+## What it does
 
-- A player who has already given the current password joins without the password window.
-- Change the server password and everyone is asked once more. Nothing to reset by hand.
-- Server side only. Players keep their vanilla client, and a player with any mod set is treated the same.
-- The password is never written to disk. The list holds a player id and a fingerprint of the password,
-  salted per file.
-- Steam servers by default. On the crossplay backend the mod stays out of the way and says so in the log,
-  because the player id cannot be trusted there; one switch overrides that, see below.
-- One admin command to take a player off the list, without changing the password for everyone else.
-- Optional: forget a guest who has been away for too long, and cap the length of the list.
+- A player who entered the current password once joins without the password window after that.
+- When you change the server password, every player must enter it once more.
+- The mod saves no password. For each player it saves the Steam id, a salted fingerprint of the password
+  and the time of the last join.
+- When you ban a player, the mod removes that player from the guest list.
 
 ## Requirements
 
 | Component | Version |
 |---|---|
-| Valheim | 1.0.12 |
+| Valheim dedicated server | 1.0.12 |
 | BepInExPack_Valheim | 5.4.2333 |
 
-No Jötunn, no client mod, no config sync.
+The mod works on Steam servers. On a server started with `-crossplay` it asks every player as usual, see
+[Crossplay servers](#crossplay-servers).
 
 ## Installation
 
-Put `ServerPasswordOnce.dll` into `BepInEx/plugins/ServerPasswordOnce/` **on the server**. Start the
-server with a password as always.
+1. Install [BepInExPack_Valheim](https://thunderstore.io/c/valheim/p/denikson/BepInExPack_Valheim/) on the server.
+2. Put `ServerPasswordOnce.dll` into `BepInEx/plugins/ServerPasswordOnce/` on the server.
+3. Start the server with `-password` as usual.
 
-Do not install it on a client. It does nothing there.
-
-## Configuration
-
-`BepInEx/config/DooDesch.ServerPasswordOnce.cfg` on the server.
-
-| Option | Description | Default |
-|---|---|---|
-| General / Enabled | Enable the mod. When disabled, every player is asked on every connect, as without it. | true |
-| General / LogJoins | Write a line for every player who joins without the window. The first time a player is added is always written. | true |
-| Guests / ForgetAfterDays | Days without a visit until a guest is forgotten and asked again. 0 keeps them while the password stands. | 0 |
-| Guests / MaxGuests | Largest number of guests to keep. Over that, whoever visited longest ago is dropped. 0 sets no limit. | 0 |
-| Risk / AllowUntrustedBackends | Skip the password on backends other than Steam as well. Read "Why Steam by default" first. | false |
+The server log then shows `The server password is in force.`
 
 ## Admin command
 
+Admins from `adminlist.txt` type the command in the game console. The game runs it on the server.
+
 ```
-serverpasswordonce status            version, backend, guest count, file, switches
-serverpasswordonce list              every guest with a shortened fingerprint and their last visit
-serverpasswordonce forget <id|name>  one guest, so they are asked again
-serverpasswordonce forgetall         all of them
-serverpasswordonce reload            read the guest list again, no restart
+serverpasswordonce status            mod state, backend, number of guests, path of the guest list
+serverpasswordonce list              all guests with their last join
+serverpasswordonce forget <id|name>  remove one guest; they must enter the password again
+serverpasswordonce forgetall         remove all guests
+serverpasswordonce reload            read the guest list file again
 ```
 
-An admin can type it in their own console and it runs on the server: the game sends it there and checks
-`adminlist.txt` itself. A name works for a player who is connected right now; otherwise use the id from
-the guest list.
+`status` and `list` write to the server log, not to your game console. `forget <name>` works only while
+that player is online. For other players, use the id from `list`.
 
-The answer does not come back to you. The game runs a remote command without the connection it came from,
-so `status` and `list` print into the server console and the server log.
-`forget`, `forgetall` and `reload` do their work either way.
+## Guest list
 
-## The guest list
+`serverpasswordonce.txt` in the save folder of the server, next to `adminlist.txt`. One line per guest:
+Steam id, password fingerprint, last join in UTC.
 
-The mod writes `serverpasswordonce.txt` next to `adminlist.txt` in the save folder of the server. One line
-per player: their platform id, a fingerprint of the password they gave, and their last visit.
+To remove a guest by hand, delete the line and run `serverpasswordonce reload`.
 
-The password itself is not in the file. The fingerprint is a hash of the password with a salt that belongs
-to that file, so the file is worthless anywhere else. The hash the game keeps cannot be used for this: its
-salt is drawn fresh on every server start, so the same password looks different after a restart.
+## Crossplay servers
 
-To make the server ask one player again, use `serverpasswordonce forget`, or delete their line and run
-`serverpasswordonce reload`. To make it ask everyone, change the password. A player you ban is taken off
-the list on their own, so lifting the ban later does not let them in without the password.
+On a server started with `-crossplay`, the game does not verify the player id. Anyone who knows the id of
+a guest could join without the password. For this reason the mod does not skip the password there and
+writes a warning to the server log.
 
-## Why Steam by default
+`Risk / AllowUntrustedBackends = true` skips the password on crossplay servers too. While it is on, the
+server writes a warning on every start.
 
-The mod has to know who is knocking before the password window would appear. It reads that from the
-connection, which is the same source the game uses for its ban and admin lists.
+## Configuration
 
-On Steam that value comes from the transport and the handshake verifies a session ticket for it, so it is
-as trustworthy as a ban.
+`BepInEx/config/DooDesch.ServerPasswordOnce.cfg` on the server. Restart the server after a change.
 
-On the crossplay backend the game takes the same value from a string the client sends, and its own check
-accepts every value. Waving a known player through there would let anyone who learns that id join without
-the password. The mod therefore does nothing on that backend and writes one line to the log saying so.
-
-`Risk / AllowUntrustedBackends` turns that refusal off. It exists because an admin may decide the password
-on their server is a convenience and not a lock. Turning it on writes a warning to the log on every start.
-If the password is what keeps people out, leave it alone.
-
-## How it works
-
-The game asks for a password in two places: the handshake tells the client whether a password is needed,
-and the join compares what the client sent. Both read the same field. For a connection that belongs to a
-known guest, and only for the length of that one call, the mod presents that field as empty. The client is
-told no password is needed, sends an empty one, and it matches. Nothing else about the handshake changes,
-and a player who is not on the list goes through the normal path.
+| Option | Description | Default |
+|---|---|---|
+| General / Enabled | When off, every player must enter the password on every join. | true |
+| General / LogJoins | Log a line for every join without the password window. The first join of a new guest is always logged. | true |
+| Guests / ForgetAfterDays | Remove guests who did not join for this many days. 0 keeps them. | 0 |
+| Guests / MaxGuests | Maximum number of guests. When the list is full, the guest with the oldest last join is removed. 0 sets no limit. | 0 |
+| Risk / AllowUntrustedBackends | Skip the password on crossplay servers too. See "Crossplay servers". | false |
 
 ## Building (developers)
 
-`dotnet build -c Release` in this folder. References come from `../Workspace/build/GameRefs.props`
-(`Workspace/lib/game`, `Workspace/lib/bepinex`). The version is `0.0.0-dev` locally and comes from the
-release tag in CI; `[BepInPlugin]` reads it through `DooDesch.ModVersion.Current`.
+`dotnet build -c Release` in this folder. References come from `../Workspace/build/GameRefs.props`. The
+version is `0.0.0-dev` locally and comes from the release tag in CI.
 
-The admin command ships in Release as well; it is the only way to manage the guest list while the server
-runs.
+## License
 
-## Credits and license
-
-DooDesch. All rights reserved, see `LICENSE.md`. You may download and play it; modifying, reusing or redistributing it needs written permission.
+DooDesch. All rights reserved, see `LICENSE.md`. You may download the mod and run it on your server.
+Changing, reusing or redistributing it needs written permission.
