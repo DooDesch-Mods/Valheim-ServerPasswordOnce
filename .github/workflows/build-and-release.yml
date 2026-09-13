@@ -25,6 +25,8 @@ permissions:
 
 env:
   MOD_NAME: ServerPasswordOnce
+  # Thunderstore category slugs, comma separated: https://thunderstore.io/api/cyberstorm/community/valheim/filters/
+  THUNDERSTORE_CATEGORIES: mods,server-side,utility
 
 jobs:
   build:
@@ -271,9 +273,10 @@ jobs:
             --arg notes_plain "$NOTES_PLAIN" \
             --arg nexus_mod_id "$NEXUS_MOD_ID" \
             --arg nexus_file_group_id "$NEXUS_FILE_GROUP_ID" \
+            --arg categories "$THUNDERSTORE_CATEGORIES" \
             '{repo: $repo, name: $name, version: $version,
               game: "valheim", game_title: "Valheim",
-              thunderstore_community: "valheim", thunderstore_categories: ["mods"], nexus_domain: "valheim",
+              thunderstore_community: "valheim", thunderstore_categories: ($categories | split(",") | map(select(length > 0))), nexus_domain: "valheim",
               description: $manifest[0].description, dependencies: $manifest[0].dependencies,
               notes: $notes, notes_bbcode: $notes_bbcode, notes_plain: $notes_plain,
               nexus_mod_id: $nexus_mod_id, nexus_file_group_id: $nexus_file_group_id,
