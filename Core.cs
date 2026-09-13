@@ -33,9 +33,9 @@ namespace ServerPasswordOnce
 			_harmony = new Harmony(PluginGuid);
 			_harmony.PatchAll(typeof(Core).Assembly);
 
-#if DEBUG
-			Debug.DevCommands.Register();
-#endif
+			// The console command table is a static dictionary that is never cleared, and the terminal of the
+			// game only adds to it, so registering this early holds.
+			Runtime.AdminCommand.Register();
 
 			Log.LogInfo($"{PluginName} {DooDesch.ModVersion.Full} initialized. Enabled={ServerPasswordOnceConfig.Enabled.Value}");
 		}

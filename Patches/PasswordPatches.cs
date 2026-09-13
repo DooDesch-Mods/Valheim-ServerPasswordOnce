@@ -23,6 +23,39 @@ namespace ServerPasswordOnce.Patches
 	}
 
 	/// <summary>
+	/// Takes a banned player off the guest list.
+	///
+	/// A banned player is refused before the password is even looked at, so while the ban stands this
+	/// changes nothing. It matters afterwards: without it, lifting a ban would let that player back in
+	/// without the password, which is not what an admin means by unbanning somebody.
+	/// </summary>
+	[HarmonyPatch(typeof(ZNet), "InternalBan")]
+	internal static class BanPatch
+	{
+		private static void Postfix(string user)
+		{
+			if (ZNet.instance == null || !ZNet.instance.IsServer() || string.IsNullOrEmpty(user))
+			{
+				return;
+			}
+
+			// The same resolution the admin command uses: digits are an id, anything else is the name of a
+			// connected player. The ban has not disconnected them yet at this point.
+			string userId = AdminCommand.Resolve(user);
+			if (userId == null)
+			{
+				Core.Log.LogWarning($"'{user}' was banned, but no player id could be found for that name. If they are on the guest list, remove them with serverpasswordonce forget.");
+				return;
+			}
+
+			if (GuestRegistry.Forget(userId))
+			{
+				Core.Log.LogInfo($"{userId} was banned and taken off the guest list.");
+			}
+		}
+	}
+
+	/// <summary>
 	/// Lets a known guest past the password, in both places the game checks it.
 	///
 	/// Both checks read one field: the handshake sends "you need a password" when it is not empty, and the
@@ -61,8 +94,9 @@ namespace ServerPasswordOnce.Patches
 			ZNet.m_serverPassword = string.Empty;
 
 			// A password window that never opens leaves no trace anywhere. Without this line a working mod
-			// and a mod that never ran look exactly the same in the log.
-			if (__originalMethod.Name == "RPC_ServerHandshake")
+			// and a mod that never ran look exactly the same in the log. An admin who finds it too chatty
+			// turns it off; the first time a guest is added is logged either way.
+			if (__originalMethod.Name == "RPC_ServerHandshake" && Config.ServerPasswordOnceConfig.LogJoins.Value)
 			{
 				Core.Log.LogInfo($"{userId} gave this password before and joins without the password window.");
 			}
@@ -102,7 +136,7 @@ namespace ServerPasswordOnce.Patches
 		}
 
 		/// <summary>The identity behind a connection, the same one the ban and admin lists are keyed on.</summary>
-		private static string HostNameOf(ZRpc rpc)
+		internal static string HostNameOf(ZRpc rpc)
 		{
 			ISocket socket = rpc?.GetSocket();
 			string host = socket?.GetHostName();

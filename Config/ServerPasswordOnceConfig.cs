@@ -11,6 +11,10 @@ namespace ServerPasswordOnce.Config
 	internal static class ServerPasswordOnceConfig
 	{
 		internal static ConfigEntry<bool> Enabled;
+		internal static ConfigEntry<bool> LogJoins;
+		internal static ConfigEntry<int> ForgetAfterDays;
+		internal static ConfigEntry<int> MaxGuests;
+		internal static ConfigEntry<bool> AllowUntrustedBackends;
 
 		internal static void Initialize(ConfigFile config)
 		{
@@ -25,6 +29,39 @@ namespace ServerPasswordOnce.Config
 				true,
 				"Enable ServerPasswordOnce. When disabled, every player is asked for the password on every " +
 				"connect, exactly as without the mod.");
+
+			LogJoins = config.Bind(
+				"General",
+				"LogJoins",
+				true,
+				"Write a line for every player who joins without the password window. The first time a player " +
+				"is added to the guest list is always written, whatever this is set to.");
+
+			ForgetAfterDays = config.Bind(
+				"Guests",
+				"ForgetAfterDays",
+				0,
+				"Days without a visit until a guest is forgotten and asked for the password again. 0 keeps " +
+				"them for as long as the password stands.");
+
+			MaxGuests = config.Bind(
+				"Guests",
+				"MaxGuests",
+				0,
+				"Largest number of guests to keep. Over that, whoever visited longest ago is dropped and asked " +
+				"again. 0 sets no limit.");
+
+			// The section is called Risk and not General on purpose. An admin who flips this should have read
+			// what it gives away, and the description is the last place to say it.
+			AllowUntrustedBackends = config.Bind(
+				"Risk",
+				"AllowUntrustedBackends",
+				false,
+				"Skip the password on backends other than Steam as well. Not recommended: on crossplay the " +
+				"player id is a string the client sends and the check of the game accepts every value, so " +
+				"anyone who learns the id of a returning player joins without the password. On Steam the id " +
+				"comes from the connection and the handshake verifies a ticket for it, which is why the mod " +
+				"trusts it there.");
 		}
 	}
 }
