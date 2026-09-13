@@ -29,7 +29,7 @@ No Jötunn, no client mod, no config sync.
 ## Installation
 
 Put `ServerPasswordOnce.dll` into `BepInEx/plugins/ServerPasswordOnce/` on the server. Start the server
-with a password as always. That is all. Do not install it on a client; it does nothing there.
+with a password as always. Do not install it on a client; it does nothing there.
 
 ## The guest list
 
@@ -56,7 +56,7 @@ An admin can type it in their own console and it runs on the server: the game se
 the guest list.
 
 The answer does not come back to you. The game runs a remote command without the connection it came from,
-so `status` and `list` print into the server console and the server log, and that is where to read them.
+so `status` and `list` print into the server console and the server log.
 `forget`, `forgetall` and `reload` do their work either way.
 
 ## Why Steam by default
@@ -82,5 +82,3 @@ what keeps people out, leave it alone.
 | Guests / ForgetAfterDays | Days without a visit until a guest is forgotten and asked again. 0 keeps them while the password stands. | 0 |
 | Guests / MaxGuests | Largest number of guests to keep. Over that, whoever visited longest ago is dropped. 0 sets no limit. | 0 |
 | Risk / AllowUntrustedBackends | Skip the password on backends other than Steam as well. Read "Why Steam by default" first. | false |
-
-Source: https://github.com/DooDesch-Mods/Valheim-ServerPasswordOnce

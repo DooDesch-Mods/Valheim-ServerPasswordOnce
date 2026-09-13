@@ -1,4 +1,7 @@
+using System.Collections.Generic;
+using System.Reflection;
 using HarmonyLib;
+using ServerPasswordOnce.Config;
 using ServerPasswordOnce.Runtime;
 
 namespace ServerPasswordOnce.Patches
@@ -69,13 +72,13 @@ namespace ServerPasswordOnce.Patches
 	[HarmonyPatch]
 	internal static class KnownGuestPatch
 	{
-		private static System.Collections.Generic.IEnumerable<System.Reflection.MethodBase> TargetMethods()
+		private static IEnumerable<MethodBase> TargetMethods()
 		{
 			yield return AccessTools.Method(typeof(ZNet), "RPC_ServerHandshake");
 			yield return AccessTools.Method(typeof(ZNet), "RPC_PeerInfo");
 		}
 
-		private static void Prefix(ZRpc rpc, out string __state, System.Reflection.MethodBase __originalMethod)
+		private static void Prefix(ZRpc rpc, out string __state, MethodBase __originalMethod)
 		{
 			__state = null;
 
@@ -96,13 +99,13 @@ namespace ServerPasswordOnce.Patches
 			// A password window that never opens leaves no trace anywhere. Without this line a working mod
 			// and a mod that never ran look exactly the same in the log. An admin who finds it too chatty
 			// turns it off; the first time a guest is added is logged either way.
-			if (__originalMethod.Name == "RPC_ServerHandshake" && Config.ServerPasswordOnceConfig.LogJoins.Value)
+			if (__originalMethod.Name == "RPC_ServerHandshake" && ServerPasswordOnceConfig.LogJoins.Value)
 			{
 				Core.Log.LogInfo($"{userId} gave this password before and joins without the password window.");
 			}
 		}
 
-		private static void Postfix(ZRpc rpc, string __state, System.Reflection.MethodBase __originalMethod)
+		private static void Postfix(ZRpc rpc, string __state, MethodBase __originalMethod)
 		{
 			if (__state != null)
 			{

@@ -8,7 +8,7 @@
 ![Game](https://img.shields.io/badge/game-Valheim%201.0.12-blue)
 ![BepInEx](https://img.shields.io/badge/BepInEx-5.4.23.3-green)
 ![Side](https://img.shields.io/badge/side-server%20only-blue)
-![Status](https://img.shields.io/badge/status-in%20development-orange)
+![Status](https://img.shields.io/badge/status-stable-green)
 
 ## Features
 
@@ -34,7 +34,7 @@ No Jötunn, no client mod, no config sync.
 ## Installation
 
 Put `ServerPasswordOnce.dll` into `BepInEx/plugins/ServerPasswordOnce/` **on the server**. Start the
-server with a password as always. That is all.
+server with a password as always.
 
 Do not install it on a client. It does nothing there.
 
@@ -65,7 +65,7 @@ An admin can type it in their own console and it runs on the server: the game se
 the guest list.
 
 The answer does not come back to you. The game runs a remote command without the connection it came from,
-so `status` and `list` print into the server console and the server log, and that is where to read them.
+so `status` and `list` print into the server console and the server log.
 `forget`, `forgetall` and `reload` do their work either way.
 
 ## The guest list
@@ -97,7 +97,7 @@ the password. The mod therefore does nothing on that backend and writes one line
 on their server is a convenience and not a lock. Turning it on writes a warning to the log on every start.
 If the password is what keeps people out, leave it alone.
 
-## What it changes, in one paragraph
+## How it works
 
 The game asks for a password in two places: the handshake tells the client whether a password is needed,
 and the join compares what the client sent. Both read the same field. For a connection that belongs to a
@@ -116,4 +116,4 @@ runs.
 
 ## Credits and license
 
-DooDesch. MIT, see `LICENSE.md`.
+DooDesch. All rights reserved, see `LICENSE.md`. You may download and play it; modifying, reusing or redistributing it needs written permission.

@@ -287,6 +287,7 @@ jobs:
           VERSION: ${{ needs.build.outputs.version }}
           NOTES: ${{ needs.build.outputs.notes }}
           REPO: ${{ github.repository }}
+          PRIVATE: ${{ github.event.repository.private }}
           NEXUS_MOD_ID: ${{ vars.NEXUS_MOD_ID }}
         run: |
           if [ -z "$WEBHOOK" ]; then echo "DISCORD_RELEASE_WEBHOOK is not set - nothing announced."; exit 0; fi
@@ -295,7 +296,18 @@ jobs:
           NAME=$(jq -r '.name // empty' thunderstore/manifest.json)
           [ -z "$NAME" ] && NAME="${SHORT#Valheim-}"
 
-          LINKS="[Thunderstore](https://thunderstore.io/c/valheim/p/DooDesch/$NAME/) · [GitHub](https://github.com/$REPO/releases/tag/v$VERSION)"
+          STORE="https://thunderstore.io/c/valheim/p/DooDesch/$NAME/"
+          # A private repository has no release page and no raw file a Discord reader could open, so the
+          # post then points to the store and carries no thumbnail.
+          if [ "$PRIVATE" = "true" ]; then
+            URL="$STORE"
+            ICON=""
+            LINKS="[Thunderstore]($STORE)"
+          else
+            URL="https://github.com/$REPO/releases/tag/v$VERSION"
+            ICON="https://raw.githubusercontent.com/$REPO/main/thunderstore/icon.png"
+            LINKS="[Thunderstore]($STORE) · [GitHub]($URL)"
+          fi
 
           # NEXUS_MOD_ID is the global uid, game_id * 2^32 + page_id, and the page id is what the URL wants.
           if [ -n "$NEXUS_MOD_ID" ]; then
@@ -308,20 +320,19 @@ jobs:
 
           # jq builds the JSON so a changelog with quotes, backticks or newlines cannot break the payload.
           jq -n --arg title "$NAME $VERSION" \
-                --arg url "https://github.com/$REPO/releases/tag/v$VERSION" \
+                --arg url "$URL" \
                 --arg desc "$NOTES" \
-                --arg icon "https://raw.githubusercontent.com/$REPO/main/thunderstore/icon.png" \
+                --arg icon "$ICON" \
                 --arg links "$LINKS" \
                 --arg foot "Valheim · $SHORT" \
-            '{embeds: [{
+            '{embeds: [({
                 title: $title,
                 url: $url,
                 description: ($desc | if length > 1400 then .[0:1400] + "\n..." else . end),
                 color: 8256434,
-                thumbnail: {url: $icon},
                 fields: [{name: "Get it", value: $links}],
                 footer: {text: $foot}
-             }]}' > payload.json
+             } + (if $icon == "" then {} else {thumbnail: {url: $icon}} end))]}' > payload.json
 
           curl -sS -f -X POST -H "Content-Type: application/json" -d @payload.json "$WEBHOOK" \
             && echo "announced $NAME $VERSION"
