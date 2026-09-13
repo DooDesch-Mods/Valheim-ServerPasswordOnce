@@ -43,7 +43,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/Valheim-Workspace
-          ref: 9efa9532615c1c5e106f98637f1eb64361e80e78 # Update deliberately after validating Workspace changes.
+          ref: 92f41cacbc010f2d182140a8d7c25a17864e2137 # Update deliberately after validating Workspace changes.
           path: Workspace
           ssh-key: ${{ secrets.WORKSPACE_TOKEN }}
 
