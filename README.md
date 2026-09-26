@@ -85,5 +85,4 @@ version is `0.0.0-dev` locally and comes from the release tag in CI.
 
 ## License
 
-DooDesch. All rights reserved, see `LICENSE.md`. You may download the mod and run it on your server.
-Changing, reusing or redistributing it needs written permission.
+DooDesch, see `LICENSE.md`. Forks, changes and pull requests are welcome. Publishing or reuploading the mod or a changed copy needs written permission.
