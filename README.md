@@ -4,7 +4,7 @@
 
 > Server mod: a player who already entered the current server password is not asked for it again.
 
-![Game](https://img.shields.io/badge/game-Valheim%201.0.12-blue)
+![Game](https://img.shields.io/badge/game-Valheim%201.0.16-blue)
 ![BepInEx](https://img.shields.io/badge/BepInEx-5.4.23.3-green)
 ![Side](https://img.shields.io/badge/side-server%20only-blue)
 ![Status](https://img.shields.io/badge/status-stable-green)
@@ -21,7 +21,7 @@
 
 | Component | Version |
 |---|---|
-| Valheim dedicated server | 1.0.12 |
+| Valheim dedicated server | 1.0.16 |
 | BepInExPack_Valheim | 5.4.2333 |
 
 The mod works on Steam servers. On a server started with `-crossplay` it asks every player as usual, see

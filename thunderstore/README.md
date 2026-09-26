@@ -16,7 +16,7 @@ Server mod: a player who already entered the current server password is not aske
 
 | Component | Version |
 |---|---|
-| Valheim dedicated server | 1.0.12 |
+| Valheim dedicated server | 1.0.16 |
 | BepInExPack_Valheim | 5.4.2333 |
 
 The mod works on Steam servers. On a server started with `-crossplay` it asks every player as usual, see

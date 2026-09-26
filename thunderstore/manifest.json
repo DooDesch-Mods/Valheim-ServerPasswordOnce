@@ -1,7 +1,7 @@
 {
   "name": "ServerPasswordOnce",
   "version_number": "0.0.0",
-  "website_url": "https://support.doodesch.de/serverpasswordonce",
+  "website_url": "https://github.com/DooDesch-Mods/Valheim-ServerPasswordOnce",
   "description": "The server asks a returning player for the password only when it changed.",
   "dependencies": [
     "denikson-BepInExPack_Valheim-5.4.2333"
