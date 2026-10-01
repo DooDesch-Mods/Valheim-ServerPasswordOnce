@@ -7,6 +7,12 @@ publishes it unchanged to GitHub, Thunderstore and Nexus.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-01
+
+- The server log says at the start when the mod is not active, and why. On a crossplay server it names `-crossplay` as the argument to remove. Reported by lautasantenni.
+- `The server password is in force.` is written only when the mod skips the password for known players.
+- The install steps say that `start_headless_server.bat` contains `-crossplay`.
+
 ## [1.0.0] - 2026-09-13
 
 - Players who already gave the current server password join without the password window.
