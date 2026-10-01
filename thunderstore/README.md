@@ -26,9 +26,11 @@ The mod works on Steam servers. On a server started with `-crossplay` it asks ev
 
 1. Install [BepInExPack_Valheim](https://thunderstore.io/c/valheim/p/denikson/BepInExPack_Valheim/) on the server.
 2. Put `ServerPasswordOnce.dll` into `BepInEx/plugins/ServerPasswordOnce/` on the server.
-3. Start the server with `-password` as usual.
+3. Start the server with `-password` and without `-crossplay`. The `start_headless_server.bat` that comes
+   with the dedicated server contains `-crossplay`; remove it from that line.
 
-The server log then shows `The server password is in force.`
+The server log then shows `The server password is in force.` If it shows
+`ServerPasswordOnce is not active`, the same line gives the cause.
 
 ## Admin command
 
@@ -55,8 +57,8 @@ To remove a guest by hand, delete the line and run `serverpasswordonce reload`.
 ## Crossplay servers
 
 On a server started with `-crossplay`, the game does not verify the player id. Anyone who knows the id of
-a guest could join without the password. For this reason the mod does not skip the password there and
-writes a warning to the server log.
+a guest could join without the password. For this reason the mod does not skip the password there. The
+server log shows `ServerPasswordOnce is not active` at the start.
 
 `Risk / AllowUntrustedBackends = true` skips the password on crossplay servers too. While it is on, the
 server writes a warning on every start.

@@ -78,6 +78,20 @@ namespace ServerPasswordOnce.Runtime
 			}
 
 			_fingerprint = _book.Fingerprint(password);
+
+			// The start is where an admin looks first. A server that never skips the password must say so
+			// here, not only when the first player joins.
+			if (!ServerPasswordOnceConfig.Enabled.Value)
+			{
+				Core.Log.LogWarning("ServerPasswordOnce is not active: General/Enabled is off. Every player is asked for the password on every join.");
+				return;
+			}
+
+			if (!BackendTrusted())
+			{
+				return;
+			}
+
 			Core.Log.LogInfo($"The server password is in force. {_book.Count} guest(s) gave it already.");
 
 			if (ServerPasswordOnceConfig.AllowUntrustedBackends.Value)
@@ -147,8 +161,9 @@ namespace ServerPasswordOnce.Runtime
 		}
 
 		/// <summary>
-		/// Whether the identity behind a connection is worth trusting on this backend. Reported once, because
-		/// an admin who installed this mod on a crossplay server needs to know it does nothing there.
+		/// Whether the identity behind a connection is worth trusting on this backend. Reported once, at the
+		/// start of the server, because an admin who installed this mod on a crossplay server needs to know it
+		/// does nothing there.
 		/// </summary>
 		private static bool BackendTrusted()
 		{
@@ -165,7 +180,17 @@ namespace ServerPasswordOnce.Runtime
 			if (!_backendReported)
 			{
 				_backendReported = true;
-				Core.Log.LogWarning($"This server runs on the {ZNet.m_onlineBackend} backend, where the player id is a value the client sends and the game accepts without checking. Skipping the password there would let anyone take the place of a returning player, so the password is asked as usual. Risk/AllowUntrustedBackends turns that off.");
+
+				// The start script that comes with the dedicated server has -crossplay in it, so this is the
+				// usual reason the mod does nothing. The line names the argument the admin has to remove.
+				bool crossplay = ZNet.m_onlineBackend == OnlineBackendType.PlayFab;
+				string cause = crossplay
+					? "this server was started with -crossplay"
+					: $"this server runs on the {ZNet.m_onlineBackend} backend";
+				string remedy = crossplay
+					? " To use the mod, remove -crossplay from the start command of the server."
+					: string.Empty;
+				Core.Log.LogWarning($"ServerPasswordOnce is not active: {cause}. There the player id is a value the client sends and the game accepts it without a check. To skip the password would let anyone take the place of a returning player, so every player is asked for the password on every join.{remedy} Risk/AllowUntrustedBackends in the config skips the password without that check.");
 			}
 			return false;
 		}
