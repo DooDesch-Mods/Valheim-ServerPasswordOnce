@@ -7,6 +7,14 @@ publishes it unchanged to GitHub, Thunderstore and Nexus.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-01
+
+- The mod now works on servers started with `-crossplay`. You can keep `-crossplay` in the start command.
+- On a crossplay server, `serverpasswordonce list` shows the platform id and the PlayFab player id of each guest. `forget` accepts each of them.
+- After a change between a start with `-crossplay` and a start without it, every player enters the password once more.
+- Guests that an older version saved on a crossplay server are removed at the first start, because their saved id was not safe.
+- `Risk / AllowUntrustedBackends` has no effect on Steam servers and crossplay servers.
+
 ## [1.0.1] - 2026-10-01
 
 - The server log says at the start when the mod is not active, and why. On a crossplay server it names `-crossplay` as the argument to remove. Reported by lautasantenni.
