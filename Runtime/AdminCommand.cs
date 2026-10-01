@@ -79,9 +79,9 @@ namespace ServerPasswordOnce.Runtime
 			Say(args, $"  role={(ZNet.instance == null ? "no network" : ZNet.instance.IsServer() ? "server or host" : "client")} backend={ZNet.m_onlineBackend}");
 			Say(args, $"  guests={GuestRegistry.Count} file={GuestRegistry.Path}");
 			Say(args, $"  forgetAfterDays={ServerPasswordOnceConfig.ForgetAfterDays.Value} maxGuests={ServerPasswordOnceConfig.MaxGuests.Value} logJoins={ServerPasswordOnceConfig.LogJoins.Value}");
-			if (ServerPasswordOnceConfig.AllowUntrustedBackends.Value)
+			if (ServerPasswordOnceConfig.AllowUntrustedBackends.Value && !GuestRegistry.BackendVerifiesPlayers)
 			{
-				Say(args, "  AllowUntrustedBackends is on: on a backend other than Steam the player id is not checked by the game.");
+				Say(args, $"  AllowUntrustedBackends is on: nothing verifies the player id on the {ZNet.m_onlineBackend} backend.");
 			}
 		}
 
@@ -93,7 +93,8 @@ namespace ServerPasswordOnce.Runtime
 				// The fingerprint is shortened on purpose. The whole value says nothing about the password,
 				// but there is no reason to spread it across a console either.
 				string seen = entry.Value.LastSeenUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
-				Say(args, $"  {entry.Key}  {entry.Value.Fingerprint.Substring(0, 8)}...  last seen {seen}");
+				string print = entry.Value.Fingerprint.Length > 8 ? entry.Value.Fingerprint.Substring(0, 8) : entry.Value.Fingerprint;
+				Say(args, $"  {GuestIdentity.Describe(entry.Key, entry.Value.PlatformId)}  {print}...  last seen {seen}");
 				shown++;
 			}
 
@@ -112,62 +113,51 @@ namespace ServerPasswordOnce.Runtime
 			}
 
 			string wanted = string.Join(" ", args.Args.Skip(2).ToArray());
-			string userId = Resolve(wanted);
+			List<string> userIds = Resolve(wanted);
 
-			if (userId == null)
+			if (userIds.Count == 0)
 			{
-				Say(args, $"No player id found for '{wanted}'. A name only works while that player is connected; otherwise use the id from the guest list.");
+				Say(args, $"No guest found for '{wanted}'. A name only works while that player is connected; otherwise use an id from the guest list.");
 				return;
 			}
 
-			Say(args, GuestRegistry.Forget(userId)
-				? $"{userId} was removed from the guest list and is asked for the password again."
-				: $"{userId} is not on the guest list.");
+			foreach (string userId in userIds)
+			{
+				string name = GuestRegistry.Describe(userId);
+				Say(args, GuestRegistry.Forget(userId)
+					? $"{name} was removed from the guest list and is asked for the password again."
+					: $"{name} is not on the guest list.");
+			}
 		}
 
 		/// <summary>
-		/// Turns an argument into a player id. A run of digits is taken as an id; anything else is looked up
-		/// among the connected players by name, the same way the game resolves a ban target.
+		/// Turns an argument into the keys of guest list entries. An id is looked up in the guest list, by
+		/// key and by platform id. A name is looked up among the connected players, the same way the game
+		/// resolves a ban target.
 		///
 		/// Used by the ban patch as well, so both take the same route.
 		/// </summary>
-		internal static string Resolve(string wanted)
+		internal static List<string> Resolve(string wanted)
 		{
-			if (string.IsNullOrEmpty(wanted))
+			List<string> found = GuestRegistry.Find(wanted);
+			if (string.IsNullOrEmpty(wanted) || ZNet.instance == null)
 			{
-				return null;
-			}
-
-			if (wanted.All(char.IsDigit))
-			{
-				return wanted;
-			}
-
-			// An id with its platform in front, the form adminlist.txt uses.
-			int underscore = wanted.LastIndexOf('_');
-			if (underscore > 0 && underscore + 1 < wanted.Length && wanted.Substring(underscore + 1).All(char.IsDigit))
-			{
-				return wanted.Substring(underscore + 1);
-			}
-
-			if (ZNet.instance == null)
-			{
-				return null;
+				return found;
 			}
 
 			foreach (ZNetPeer peer in ZNet.instance.GetPeers())
 			{
-				if (peer == null || peer.m_socket == null)
+				if (peer == null || !string.Equals(peer.m_playerName, wanted, StringComparison.OrdinalIgnoreCase))
 				{
 					continue;
 				}
-				if (string.Equals(peer.m_playerName, wanted, StringComparison.OrdinalIgnoreCase))
+				if (GuestIdentity.TryRead(peer.m_socket, out string key, out _) && !found.Contains(key))
 				{
-					return peer.m_socket.GetHostName();
+					found.Add(key);
 				}
 			}
 
-			return null;
+			return found;
 		}
 
 		/// <summary>

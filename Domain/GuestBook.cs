@@ -18,14 +18,21 @@ namespace ServerPasswordOnce.Domain
 		/// saving. The file and the admin command show it in the local time of the server.
 		/// </summary>
 		internal DateTime LastSeenUtc;
+
+		/// <summary>
+		/// The id the ban and admin lists of the game use for this guest, when it is not the key of the entry.
+		/// That is the case on a crossplay server. It is a value the client sends, so it only helps an admin
+		/// find the entry. It never decides who joins without the password.
+		/// </summary>
+		internal string PlatformId = string.Empty;
 	}
 
 	/// <summary>
 	/// Who has already given the current password, kept across restarts.
 	///
-	/// An entry is a platform user id together with a fingerprint of the password that was in force when
-	/// they gave it, and the time of their last visit. Change the server password and every fingerprint
-	/// stops matching, so everyone is asked once more. That is the whole rule.
+	/// An entry is a player id together with a fingerprint of the password that was in force when they gave
+	/// it, and the time of their last visit. Change the server password and every fingerprint stops
+	/// matching, so everyone is asked once more. That is the whole rule.
 	///
 	/// The password itself is never written down. The fingerprint is a hash of the password with a salt that
 	/// belongs to this file, so the file is useless anywhere else and says nothing about the password. The
@@ -35,7 +42,7 @@ namespace ServerPasswordOnce.Domain
 	internal sealed class GuestBook
 	{
 		private const string HeaderName = "ServerPasswordOnce";
-		private const int Format = 2;
+		private const int Format = 3;
 
 		private readonly string _path;
 		private readonly Dictionary<string, GuestEntry> _entries = new Dictionary<string, GuestEntry>(StringComparer.Ordinal);
@@ -85,12 +92,14 @@ namespace ServerPasswordOnce.Domain
 		///
 		/// Returns false when nothing changed, so the caller can skip a write.
 		/// </summary>
-		internal bool Remember(string userId, string fingerprint, DateTime nowUtc, int maxGuests, Action<string> report)
+		internal bool Remember(string userId, string platformId, string fingerprint, DateTime nowUtc, int maxGuests, Action<string> report)
 		{
 			if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(fingerprint))
 			{
 				return false;
 			}
+
+			string platform = CleanPlatformId(platformId, userId);
 
 			if (_entries.TryGetValue(userId, out GuestEntry entry))
 			{
@@ -98,13 +107,58 @@ namespace ServerPasswordOnce.Domain
 				// That is what lets an expiry measure absence instead of the age of the entry.
 				entry.Fingerprint = fingerprint;
 				entry.LastSeenUtc = nowUtc;
+				if (platform.Length > 0)
+				{
+					entry.PlatformId = platform;
+				}
 				return true;
 			}
 
-			_entries[userId] = new GuestEntry { Fingerprint = fingerprint, LastSeenUtc = nowUtc };
+			_entries[userId] = new GuestEntry { Fingerprint = fingerprint, LastSeenUtc = nowUtc, PlatformId = platform };
 			Trim(maxGuests, report);
 			return true;
 		}
+
+		/// <summary>
+		/// The entries an admin means by an id. An id matches the key of an entry or its platform id, with or
+		/// without the platform in front (`Steam_1234` and `1234`).
+		///
+		/// More than one entry can carry the same platform id, because a crossplay client sends that value
+		/// itself. All of them are returned: to ask one player too many for the password is the safe side.
+		/// </summary>
+		internal List<string> Find(string wanted)
+		{
+			List<string> found = new List<string>();
+			if (string.IsNullOrEmpty(wanted))
+			{
+				return found;
+			}
+
+			string number = NumberOf(wanted);
+			foreach (KeyValuePair<string, GuestEntry> pair in _entries)
+			{
+				string platform = pair.Value.PlatformId;
+				bool match = string.Equals(pair.Key, wanted, StringComparison.OrdinalIgnoreCase)
+					|| (platform.Length > 0 && string.Equals(platform, wanted, StringComparison.OrdinalIgnoreCase));
+
+				if (!match && number != null)
+				{
+					// A bare number matches every platform. A number with a platform in front must not match
+					// the same number on another platform.
+					bool bare = number.Length == wanted.Length;
+					match = pair.Key == number || (bare && NumberOf(platform) == number);
+				}
+
+				if (match)
+				{
+					found.Add(pair.Key);
+				}
+			}
+			return found;
+		}
+
+		internal string PlatformIdOf(string userId)
+			=> userId != null && _entries.TryGetValue(userId, out GuestEntry entry) ? entry.PlatformId : string.Empty;
 
 		internal bool Forget(string userId) => _entries.Remove(userId);
 
@@ -203,6 +257,7 @@ namespace ServerPasswordOnce.Domain
 
 			int skipped = 0;
 			int undated = 0;
+			int unverified = 0;
 			for (int i = 2; i < lines.Length; i++)
 			{
 				string line = lines[i].Trim();
@@ -215,6 +270,15 @@ namespace ServerPasswordOnce.Domain
 				if (parts.Length < 2 || parts[0].Length == 0 || parts[1].Length == 0)
 				{
 					skipped++;
+					continue;
+				}
+
+				// Before format 3 a key with a platform in front came from a crossplay server that ran with
+				// AllowUntrustedBackends. That key is a value the client sent. No connection is identified by
+				// it any longer, so the entry could never match again.
+				if (format < 3 && parts[0].IndexOf('_') > 0)
+				{
+					unverified++;
 					continue;
 				}
 
@@ -238,7 +302,12 @@ namespace ServerPasswordOnce.Domain
 					undated++;
 				}
 
-				_entries[parts[0]] = new GuestEntry { Fingerprint = parts[1], LastSeenUtc = lastSeen };
+				_entries[parts[0]] = new GuestEntry
+				{
+					Fingerprint = parts[1],
+					LastSeenUtc = lastSeen,
+					PlatformId = parts.Length >= 4 ? CleanPlatformId(parts[3], parts[0]) : string.Empty,
+				};
 			}
 
 			if (skipped > 0)
@@ -251,8 +320,13 @@ namespace ServerPasswordOnce.Domain
 				warn($"{undated} entry(s) in {_path} come from an older format and carry no visit time. They count as visited now, so an expiry does not throw them out at once.");
 			}
 
+			if (unverified > 0)
+			{
+				warn($"{unverified} entry(s) in {_path} were stored under a platform id that the client sent. This version identifies a crossplay player by the PlayFab player id of the connection, so these entries were removed. These players are asked for the password once more.");
+			}
+
 			// Anything the reader had to repair is written back, so the file stops being repaired on every start.
-			return format != Format || skipped > 0 || undated > 0;
+			return format != Format || skipped > 0 || undated > 0 || unverified > 0;
 		}
 
 		/// <summary>
@@ -264,12 +338,17 @@ namespace ServerPasswordOnce.Domain
 			StringBuilder text = new StringBuilder();
 			text.Append(HeaderName).Append(' ').Append(Format.ToString(CultureInfo.InvariantCulture)).AppendLine();
 			text.AppendLine(_salt);
-			text.AppendLine("# One line per guest: player id, the fingerprint of the password they gave, and their last visit.");
+			text.AppendLine("# One line per guest: player id, the fingerprint of the password they gave, their last visit, and on a crossplay server their platform id.");
 			foreach (KeyValuePair<string, GuestEntry> entry in _entries)
 			{
 				text.Append(entry.Key).Append(' ')
 					.Append(entry.Value.Fingerprint).Append(' ')
-					.AppendLine(entry.Value.LastSeenUtc.ToLocalTime().ToString("O", CultureInfo.InvariantCulture));
+					.Append(entry.Value.LastSeenUtc.ToLocalTime().ToString("O", CultureInfo.InvariantCulture));
+				if (entry.Value.PlatformId.Length > 0)
+				{
+					text.Append(' ').Append(entry.Value.PlatformId);
+				}
+				text.AppendLine();
 			}
 
 			string temporary = _path + ".new";
@@ -305,6 +384,42 @@ namespace ServerPasswordOnce.Domain
 				}
 				return false;
 			}
+		}
+
+		/// <summary>
+		/// The platform id as one word for the file. The value comes from the client, so it must not be able
+		/// to break the line it is written into. Empty when it says nothing the key does not say.
+		/// </summary>
+		private static string CleanPlatformId(string platformId, string userId)
+		{
+			if (string.IsNullOrEmpty(platformId))
+			{
+				return string.Empty;
+			}
+
+			StringBuilder text = new StringBuilder(platformId.Length);
+			foreach (char value in platformId)
+			{
+				if (!char.IsWhiteSpace(value) && !char.IsControl(value))
+				{
+					text.Append(value);
+				}
+			}
+
+			string clean = text.Length > 64 ? text.ToString(0, 64) : text.ToString();
+			return clean == userId ? string.Empty : clean;
+		}
+
+		/// <summary>The number in `1234` or `Steam_1234`, or null when the text is neither.</summary>
+		private static string NumberOf(string id)
+		{
+			if (string.IsNullOrEmpty(id))
+			{
+				return null;
+			}
+
+			string number = id.Substring(id.LastIndexOf('_') + 1);
+			return number.Length > 0 && number.All(char.IsDigit) ? number : null;
 		}
 
 		private static string NewSalt()

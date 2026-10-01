@@ -9,11 +9,9 @@ namespace ServerPasswordOnce.Runtime
 	/// The decision the whole mod exists for: has this connection already given the password that is in
 	/// force right now.
 	///
-	/// Identity comes from the socket of the connection, which is what the game itself uses for its ban and
-	/// admin lists. On Steam that value comes from the transport and the handshake verifies a session ticket
-	/// for it. On the crossplay backend it is a string the client sends and the check of the game accepts
-	/// every value, so a remembered guest could be impersonated there. The mod therefore keeps out of the way
-	/// on any backend but Steam, unless an admin has turned that off in the Risk section.
+	/// A guest is known by an id that the client cannot choose (`GuestIdentity`): the Steam id on a Steam
+	/// server, the PlayFab player id on a crossplay server. Every other backend has no such id, so the mod
+	/// keeps out of the way there, unless an admin has turned that off in the Risk section.
 	/// </summary>
 	internal static class GuestRegistry
 	{
@@ -27,6 +25,10 @@ namespace ServerPasswordOnce.Runtime
 		internal static int Count => _book?.Count ?? 0;
 		internal static string Path => _book?.Path ?? "(no file)";
 		internal static bool PasswordKnown => _fingerprint.Length > 0;
+
+		/// <summary>True on a backend where the connection carries an id the client cannot choose.</summary>
+		internal static bool BackendVerifiesPlayers
+			=> ZNet.m_onlineBackend == OnlineBackendType.Steamworks || ZNet.m_onlineBackend == OnlineBackendType.PlayFab;
 
 		internal static IEnumerable<KeyValuePair<string, GuestEntry>> Entries
 			=> _book != null ? _book.Entries : new Dictionary<string, GuestEntry>();
@@ -94,9 +96,16 @@ namespace ServerPasswordOnce.Runtime
 
 			Core.Log.LogInfo($"The server password is in force. {_book.Count} guest(s) gave it already.");
 
-			if (ServerPasswordOnceConfig.AllowUntrustedBackends.Value)
+			if (ZNet.m_onlineBackend == OnlineBackendType.PlayFab)
 			{
-				Core.Log.LogWarning("AllowUntrustedBackends is on. On any backend but Steam the player id is a string the client sends and the game accepts it unchecked, so anyone who learns the id of a returning player joins without the password. Turn it off unless you know that is what you want.");
+				// The ids in the log and in the guest list look different on a crossplay server. An admin who
+				// compares them with adminlist.txt needs to know which one is which.
+				Core.Log.LogInfo("This is a crossplay server. A guest is identified by the PlayFab player id of the connection; the platform id is stored with it for the admin command.");
+			}
+
+			if (!BackendVerifiesPlayers)
+			{
+				Core.Log.LogWarning($"AllowUntrustedBackends is on and this server runs on the {ZNet.m_onlineBackend} backend. There the player id is a value the client sends and nothing verifies it, so anyone who learns the id of a returning player joins without the password. Turn it off unless you know that is what you want.");
 			}
 		}
 
@@ -110,7 +119,7 @@ namespace ServerPasswordOnce.Runtime
 		}
 
 		/// <summary>Records a guest who has just been let in.</summary>
-		internal static void Remember(string userId)
+		internal static void Remember(string userId, string platformId)
 		{
 			if (!Armed || string.IsNullOrEmpty(userId))
 			{
@@ -118,7 +127,7 @@ namespace ServerPasswordOnce.Runtime
 			}
 
 			bool isNew = !_book.Knows(userId, _fingerprint);
-			if (!_book.Remember(userId, _fingerprint, DateTime.UtcNow, ServerPasswordOnceConfig.MaxGuests.Value, Warn))
+			if (!_book.Remember(userId, platformId, _fingerprint, DateTime.UtcNow, ServerPasswordOnceConfig.MaxGuests.Value, Warn))
 			{
 				return;
 			}
@@ -132,18 +141,32 @@ namespace ServerPasswordOnce.Runtime
 			// mod took on responsibility for that player.
 			if (isNew)
 			{
-				Core.Log.LogInfo($"{userId} gave the password and will not be asked again while it stands.");
+				Core.Log.LogInfo($"{GuestIdentity.Describe(userId, platformId)} gave the password and will not be asked again while it stands.");
 			}
 		}
 
+		/// <summary>The keys of the entries an id stands for. See `GuestBook.Find`.</summary>
+		internal static List<string> Find(string wanted)
+			=> _book != null ? _book.Find(wanted) : new List<string>();
+
+		/// <summary>The name of an entry for a log line or an answer of the admin command.</summary>
+		internal static string Describe(string userId)
+			=> GuestIdentity.Describe(userId, _book?.PlatformIdOf(userId));
+
 		internal static bool Forget(string userId)
 		{
-			if (_book == null || !_book.Forget(userId))
+			if (_book == null)
+			{
+				return false;
+			}
+
+			string name = Describe(userId);
+			if (!_book.Forget(userId))
 			{
 				return false;
 			}
 			_book.Save(Warn);
-			Core.Log.LogInfo($"{userId} was removed from the guest list and is asked again.");
+			Core.Log.LogInfo($"{name} was removed from the guest list and is asked again.");
 			return true;
 		}
 
@@ -162,8 +185,7 @@ namespace ServerPasswordOnce.Runtime
 
 		/// <summary>
 		/// Whether the identity behind a connection is worth trusting on this backend. Reported once, at the
-		/// start of the server, because an admin who installed this mod on a crossplay server needs to know it
-		/// does nothing there.
+		/// start of the server, because an admin who installed this mod needs to know when it does nothing.
 		/// </summary>
 		private static bool BackendTrusted()
 		{
@@ -172,7 +194,7 @@ namespace ServerPasswordOnce.Runtime
 				return false;
 			}
 
-			if (ZNet.m_onlineBackend == OnlineBackendType.Steamworks || ServerPasswordOnceConfig.AllowUntrustedBackends.Value)
+			if (BackendVerifiesPlayers || ServerPasswordOnceConfig.AllowUntrustedBackends.Value)
 			{
 				return true;
 			}
@@ -180,17 +202,7 @@ namespace ServerPasswordOnce.Runtime
 			if (!_backendReported)
 			{
 				_backendReported = true;
-
-				// The start script that comes with the dedicated server has -crossplay in it, so this is the
-				// usual reason the mod does nothing. The line names the argument the admin has to remove.
-				bool crossplay = ZNet.m_onlineBackend == OnlineBackendType.PlayFab;
-				string cause = crossplay
-					? "this server was started with -crossplay"
-					: $"this server runs on the {ZNet.m_onlineBackend} backend";
-				string remedy = crossplay
-					? " To use the mod, remove -crossplay from the start command of the server."
-					: string.Empty;
-				Core.Log.LogWarning($"ServerPasswordOnce is not active: {cause}. There the player id is a value the client sends and the game accepts it without a check. To skip the password would let anyone take the place of a returning player, so every player is asked for the password on every join.{remedy} Risk/AllowUntrustedBackends in the config skips the password without that check.");
+				Core.Log.LogWarning($"ServerPasswordOnce is not active: this server runs on the {ZNet.m_onlineBackend} backend. There the player id is a value the client sends and nothing verifies it. To skip the password would let anyone take the place of a returning player, so every player is asked for the password on every join. Risk/AllowUntrustedBackends in the config skips the password without that check.");
 			}
 			return false;
 		}

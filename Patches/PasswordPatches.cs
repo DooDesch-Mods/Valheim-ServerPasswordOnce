@@ -42,18 +42,22 @@ namespace ServerPasswordOnce.Patches
 				return;
 			}
 
-			// The same resolution the admin command uses: digits are an id, anything else is the name of a
+			// The same resolution the admin command uses: an id from the guest list, or the name of a
 			// connected player. The ban has not disconnected them yet at this point.
-			string userId = AdminCommand.Resolve(user);
-			if (userId == null)
+			List<string> userIds = AdminCommand.Resolve(user);
+			if (userIds.Count == 0)
 			{
-				Core.Log.LogWarning($"'{user}' was banned, but no player id could be found for that name. If they are on the guest list, remove them with serverpasswordonce forget.");
+				Core.Log.LogInfo($"'{user}' was banned. No guest list entry matches, so there is nothing to remove.");
 				return;
 			}
 
-			if (GuestRegistry.Forget(userId))
+			foreach (string userId in userIds)
 			{
-				Core.Log.LogInfo($"{userId} was banned and taken off the guest list.");
+				string name = GuestRegistry.Describe(userId);
+				if (GuestRegistry.Forget(userId))
+				{
+					Core.Log.LogInfo($"{name} was banned and taken off the guest list.");
+				}
 			}
 		}
 	}
@@ -87,8 +91,7 @@ namespace ServerPasswordOnce.Patches
 				return;
 			}
 
-			string userId = HostNameOf(rpc);
-			if (userId == null || !GuestRegistry.Knows(userId))
+			if (!GuestIdentity.TryRead(rpc?.GetSocket(), out string userId, out _) || !GuestRegistry.Knows(userId))
 			{
 				return;
 			}
@@ -101,7 +104,7 @@ namespace ServerPasswordOnce.Patches
 			// turns it off; the first time a guest is added is logged either way.
 			if (__originalMethod.Name == "RPC_ServerHandshake" && ServerPasswordOnceConfig.LogJoins.Value)
 			{
-				Core.Log.LogInfo($"{userId} gave this password before and joins without the password window.");
+				Core.Log.LogInfo($"{GuestRegistry.Describe(userId)} gave this password before and joins without the password window.");
 			}
 		}
 
@@ -131,24 +134,10 @@ namespace ServerPasswordOnce.Patches
 				return;
 			}
 
-			string userId = HostNameOf(rpc);
-			if (userId != null)
+			if (GuestIdentity.TryRead(rpc.GetSocket(), out string userId, out string platformId))
 			{
-				GuestRegistry.Remember(userId);
+				GuestRegistry.Remember(userId, platformId);
 			}
-		}
-
-		/// <summary>The identity behind a connection, the same one the ban and admin lists are keyed on.</summary>
-		internal static string HostNameOf(ZRpc rpc)
-		{
-			ISocket socket = rpc?.GetSocket();
-			string host = socket?.GetHostName();
-			if (string.IsNullOrEmpty(host))
-			{
-				Core.Log.LogWarning("A connection reported no host name, so it is asked for the password as usual.");
-				return null;
-			}
-			return host;
 		}
 	}
 }

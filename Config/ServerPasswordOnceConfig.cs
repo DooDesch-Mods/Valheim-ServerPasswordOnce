@@ -57,11 +57,10 @@ namespace ServerPasswordOnce.Config
 				"Risk",
 				"AllowUntrustedBackends",
 				false,
-				"Skip the password on backends other than Steam as well. Not recommended: on crossplay the " +
-				"player id is a string the client sends and the check of the game accepts every value, so " +
-				"anyone who learns the id of a returning player joins without the password. On Steam the id " +
-				"comes from the connection and the handshake verifies a ticket for it, which is why the mod " +
-				"trusts it there.");
+				"Skip the password on backends other than Steam and crossplay (PlayFab) as well. Not " +
+				"recommended: there the player id is a value the client sends and nothing verifies it, so " +
+				"anyone who learns the id of a returning player joins without the password. This setting has " +
+				"no effect on a Steam server or a crossplay server, where the id comes from the connection.");
 		}
 	}
 }
