@@ -2,6 +2,8 @@
 
 > 🛟 **Need help or found a bug?** Get support at [support.doodesch.de/serverpasswordonce](https://support.doodesch.de/serverpasswordonce).
 
+[![Discord](https://mods.doodesch.de/img/badge.svg)](https://mods.doodesch.de)
+
 > Server mod: a player who already entered the current server password is not asked for it again.
 
 ![Game](https://img.shields.io/badge/game-Valheim%201.0.16-blue)
@@ -86,6 +88,12 @@ skip the password. The mod saves it because `adminlist.txt` and `bannedlist.txt`
 
 `dotnet build -c Release` in this folder. References come from `../Workspace/build/GameRefs.props`. The
 version is `0.0.0-dev` locally and comes from the release tag in CI.
+
+## Community
+
+[![DooDesch Mods on Discord](https://mods.doodesch.de/img/card.svg)](https://mods.doodesch.de)
+
+Join the DooDesch Mods Discord: update pings, polls on what comes next, and playtests of new mods.
 
 ## License
 
