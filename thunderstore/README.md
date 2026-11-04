@@ -2,6 +2,8 @@
 
 > 🛟 **Need help or found a bug?** Get support at [support.doodesch.de/serverpasswordonce](https://support.doodesch.de/serverpasswordonce).
 
+[![Discord](https://mods.doodesch.de/img/badge.svg)](https://mods.doodesch.de)
+
 Server mod: a player who already entered the current server password is not asked for it again.
 
 ## What it does
@@ -76,3 +78,9 @@ skip the password. The mod saves it because `adminlist.txt` and `bannedlist.txt`
 | Guests / ForgetAfterDays | Remove guests who did not join for this many days. 0 keeps them. | 0 |
 | Guests / MaxGuests | Maximum number of guests. When the list is full, the guest with the oldest last join is removed. 0 sets no limit. | 0 |
 | Risk / AllowUntrustedBackends | Skip the password on other network backends too, where nothing verifies the player id. No effect on Steam servers and crossplay servers. | false |
+
+## Community
+
+[![DooDesch Mods on Discord](https://mods.doodesch.de/img/card.svg)](https://mods.doodesch.de)
+
+Join the DooDesch Mods Discord: update pings, polls on what comes next, and playtests of new mods.
